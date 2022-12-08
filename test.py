@@ -62,8 +62,6 @@ if __name__ == '__main__':
             break
         model.set_input(data)  # unpack data from data loader
         model.test()           # run inference
-        #print(' *** i ', i )
-        model.calculate_var_loss()
         visuals = model.get_current_visuals()  # get image results
         img_path = model.get_image_paths()     # get image paths
         if i % 5 == 0:  # save images to an HTML file
