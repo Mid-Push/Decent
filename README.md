@@ -16,14 +16,17 @@ python test.py --dataroot=datasets/selfie2anime
 - Different flows `--flow_type=bnaf` BNAF works best for me. Feel free to experiment other flows.
 
 ### Pretrained Models
-- [label2city]()
-- [horse2zebra]()
-- [cat2dog]()
-- [selfie2anime]()
+- [label2city](https://drive.google.com/file/d/1HBevQfsQLIcnwCQHQoCHlfbofLSwZYWQ/view?usp=sharing)
+- [horse2zebra](https://drive.google.com/file/d/13GwdqDoH_BNt4iciLg758g5k1CWz3-t2/view?usp=sharing)
+- [cat2dog](https://drive.google.com/file/d/1yOVDhsiVDtSuobGihsheMun_c9lXD7ON/view?usp=sharing)
+- [selfie2anime](https://drive.google.com/file/d/1xFLJjK7jQmW-mA5Mpu_ywabrFHnSziZb/view?usp=sharing)
+- [Summer2winter](https://drive.google.com/file/d/1JC3Eb8fDYw_iVivISkI_TSUlxrlN8HwA/view?usp=sharing)
 
-Will upload the checkpoints by 12/10/2022
+
+
 
 ### Evaluation Script of label2city
+Different Pretrained-DRN and evaluation protocols can cause big performance gaps. So,
 I created a repository to upload the [evaluation script of label2city](https://github.com/Mid-Push/evaluation_on_cityscapes). Hope the script could make the future evaluation easier.
 
 ## Citation
