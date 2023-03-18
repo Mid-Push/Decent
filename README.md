@@ -10,7 +10,15 @@ python train.py --dataroot=datasets/selfie2anime
 ```bash
 python test.py --dataroot=datasets/selfie2anime
 ```
+- Multi-GPU training:
+```bash
+python train.py --dataroot=datasets/selfie2anime --gpu=0,1,2,3 --batch_size=4  
+```
+
+
+
 - The Weight `--lambda_var=0.01` 
+- Compute density changing loss across images `--var_all` I have tested var_all=False. 
 - Number of Flow Blocks `--flow_blocks=1` 
 - Learning Rate of Flow `--flow_lr=0.001` 
 - Different flows `--flow_type=bnaf` BNAF works best for me. Feel free to experiment other flows.

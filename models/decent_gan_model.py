@@ -10,41 +10,43 @@ from util.image_pool import ImagePool
 from models.bnaf import Adam
 
 class DecentGANModel(BaseModel):
-    """ This class implements CUT and FastCUT model, described in the paper
-    Contrastive Learning for Unpaired Image-to-Image Translation
-    Taesung Park, Alexei A. Efros, Richard Zhang, Jun-Yan Zhu
-    ECCV, 2020
+    """ This class implements DECENT model, described in the paper
+    Unpaired Image-to-Image Translation with Density Changing Regularization
+    Shaoan Xie, Qirong Ho, Kun Zhang
+    NeurIPS 2022
 
-    The code borrows heavily from the PyTorch implementation of CycleGAN
-    https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
+    The code borrows heavily from the PyTorch implementation of CycleGAN and CUT
     """
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
         """  Configures options specific for CUT model
         """
-        parser.add_argument('--CUT_mode', type=str, default="CUT", choices='(CUT, cut, FastCUT, fastcut)')
-
-        parser.add_argument('--lambda_GAN', type=float, default=1.0, help='weight for GAN lossï¼šGAN(G(X))')
-        parser.add_argument('--lambda_var', type=float, default=0.01, help='weight for NCE loss: NCE(G(X), X)')
-        parser.add_argument('--lambda_idt', type=float, default=10.0, help='weight for NCE loss: NCE(G(X), X)')
-        parser.add_argument('--var_layers', type=str, default='0,4,8,12,16', help='compute NCE loss on which layers')
+        parser.add_argument('--lambda_GAN', type=float, default=1.0, help='weight for GAN loss')
+        parser.add_argument('--lambda_var', type=float, default=0.01, help='weight for variance loss')
+        parser.add_argument('--lambda_idt', type=float, default=10.0, help='weight for identity loss')
+        parser.add_argument('--var_layers', type=str, default='0,4,8,12,16', help='compute density loss on which layers')
         parser.add_argument('--num_patches', type=int, default=256, help='number of patches per layer')
-        parser.add_argument('--flow_type', type=str, default='bnaf', help='number of patches per layer')
-        parser.add_argument('--maf_dim', type=int, default=1024, help='number of patches per layer')
-        parser.add_argument('--maf_layers', type=int, default=2, help='number of patches per layer')
-        parser.add_argument('--maf_comps', type=int, default=10, help='number of patches per layer')
-        parser.add_argument('--flow_blocks', type=int, default=1, help='number of patches per layer')
-        parser.add_argument('--bnaf_layers', type=int, default=0, help='number of patches per layer')
-        parser.add_argument('--bnaf_dim', type=int, default=10, help='number of patches per layer')
-        parser.add_argument('--flow_lr', type=float, default=1e-3, help='number of patches per layer')
-        parser.add_argument('--flow_ema', type=float, default=0.998, help='number of patches per layer')
-        parser.add_argument('--tag', type=str, default='debug', help='weight for GAN lossGAN(G(X))')
+        parser.add_argument('--flow_type', type=str, default='bnaf', help='flow type to estimate density')
+        parser.add_argument('--maf_dim', type=int, default=1024, help='dimension of MAF')
+        parser.add_argument('--maf_layers', type=int, default=2, help='number of layers in MAF')
+        parser.add_argument('--maf_comps', type=int, default=10, help='number of components in MAF')
+        parser.add_argument('--flow_blocks', type=int, default=1, help='number of blocks in flow model')
+        parser.add_argument('--bnaf_layers', type=int, default=0, help='number of layers in BNAF')
+        parser.add_argument('--bnaf_dim', type=int, default=10, help='dimension of BNAF')
+        parser.add_argument('--flow_lr', type=float, default=1e-3, help='learning rate for flow')
+        parser.add_argument('--flow_ema', type=float, default=0.998, help='exponential moving average rate for flow')
+        parser.add_argument('--var_all', action='store_true', help='compute var on all images or single image')
+        parser.add_argument('--tag', type=str, default='debug', help='tag to recognize the checkpoints')
         parser.set_defaults(pool_size=0)  # no image pooling
         opt, _ = parser.parse_known_args()
         dataset = os.path.basename(opt.dataroot.strip('/'))
         model_id = '%s_%s/var%s_np%s_nb%s_nl%s_nd%s_lr%s_ema%s' % (dataset, opt.direction,
                     opt.lambda_var, opt.num_patches, opt.flow_blocks, opt.bnaf_layers,
                     opt.bnaf_dim, opt.flow_lr, opt.flow_ema)
+        if opt.var_all:
+            model_id += '_var_all'
+        else:
+            model_id += '_var_single'
         parser.set_defaults(name='%s/%s' % (opt.tag, model_id))
 
         return parser
@@ -177,13 +179,12 @@ class DecentGANModel(BaseModel):
         return self.loss_G
 
     def compute_F_loss(self):
-
         log_probs_A, _, _ = self.netF_A(self.patches_real_A, self.opt.num_patches, None, detach=True)
         log_probs_B, _, _ = self.netF_B(self.patches_real_B, self.opt.num_patches, None, detach=True)
         self.loss_nll_A = 0.
         self.loss_nll_B = 0.
         for log_prob_a, log_prob_b, var_layer in zip(log_probs_A, log_probs_B, self.var_layers):
-            assert len(log_prob_a) == self.opt.batch_size * self.opt.num_patches
+            #assert len(log_prob_a) == self.opt.num_patches
             self.loss_nll_A += (-log_prob_a.mean())
             self.loss_nll_B += (-log_prob_b.mean())
         self.loss_F = (self.loss_nll_A + self.loss_nll_B)/len(self.var_layers)
@@ -202,11 +203,16 @@ class DecentGANModel(BaseModel):
             nll_A += -log_prob_a.mean()
             nll_B += -log_prob_b.mean()
             density_changes = (log_prob_a.detach() - log_prob_b).squeeze()
-            density_changes_per_dim = density_changes/(feat_len*np.log(2))
+            density_changes_per_dim = density_changes/(feat_len.mean().item()*np.log(2))
             assert len(density_changes.size()) == 1
             assert len(density_changes) == self.opt.batch_size * self.opt.num_patches
-            loss_layer = torch.var(density_changes_per_dim).mean()
-            #print('*** ', var_layer, '   ', loss_layer.item(), ' **  ', -log_prob_a.mean().item())
+            if self.opt.var_all:
+                # compute density changing loss on all patches across different input images
+                loss_layer = torch.var(density_changes_per_dim).mean()
+            else:
+                # compute density changing loss on patches on single input images, then average it
+                density_changes_per_dim = density_changes_per_dim.view(self.opt.batch_size, self.opt.num_patches)
+                loss_layer = torch.var(density_changes_per_dim, dim=-1).mean()
             total_var_loss += loss_layer
         self.loss_exp_A = nll_A
         self.loss_exp_B = nll_B

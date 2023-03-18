@@ -624,6 +624,7 @@ class PatchDensityEstimator(nn.Module):
             setattr(self, 'flow_%d' % mlp_id, flow)
             if len(self.gpu_ids) > 0:
                 flow.cuda()
+        self.to(self.gpu_ids[0])
 
     def forward(self, feats, num_patches=256, patch_ids=None, detach=False):
         return_ids = []
@@ -654,7 +655,7 @@ class PatchDensityEstimator(nn.Module):
             log_probs = flow.log_probs(x_sample)
             #assert len(log_probs) == B*num_patches
             return_log_probs.append(log_probs)
-            return_lens.append(feat_reshape.size(-1))
+            return_lens.append(torch.tensor(feat_reshape.size(-1), dtype=torch.float32, device=feat.device))
         return return_log_probs, return_lens, return_ids
 
 
